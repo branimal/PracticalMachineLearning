@@ -7,24 +7,102 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+library(lattice);
+library(ggplot2);
+library(dplyr);
+library(rpart);
+library(caret);
+library(rattle);
+library(randomForest);
+library(nlme);
+library(mgcv);
+set.seed(8675309);
 ```
 
-## R Markdown
+## Overview
+In this project we are asked to analyze the data captured by activity tracking devices to see if it is possible to predict how 'correctly' a person is performing the activity based upon the outputs of activity tracking devices.  
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+## The Data
+We were provided with two data sets, a training set of 19,622 observations and a testing set of 20 observations. Opening the test set, we see that each observation has 160 variables, six identifying information about the observation (name, date, etc.), 153 containing numeric readings from the activity tracking device, and one identifying how 'correclty' the exercise was performed. The first six are not interesting to us (we are not interested in knowing that Pedro performs the exercises more correctly than Jeremy). Really we are interested in predicting the outcome variable based upon the 153 numeric variables provided by the activity tracking devices. 
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+On closer inspection, it appears only a tiny fraction, 406 observations or 2%, have data in all 153 variables. 98% of the observations have data for only 53 variables. Given this, I decided to analyze the two types of observations separately. To this end I segregated and cleaned the data as follows:
 
-```{r cars}
-summary(cars)
+```{r load-data}
+training <- read.csv("pml-training.csv");
+trainingTab <- data.frame(training);
+trainingTab <- cbind(mutate_all(trainingTab[,8:159], as.numeric), trainingTab[160]);
+completeRows <- filter(trainingTab, !is.na(max_roll_belt))
+incompleteRows <- filter(trainingTab, is.na(max_roll_belt))
+completeCols <- incompleteRows;
+completeCols <- completeCols %>% select_if(function(col) !is.na(col[2]));
+completeCols <- completeCols %>% select_if(function(col) col[2] != 1);
+
+```
+Some of the numeric data had been identified as Factors during import so I forced them back to numeric. The identifying information I removed and the outcome variable (classe) I left as a Factor. Now we have the data somewhat cleaned in a variable named completeCols. 
+
+
+## The Analysis
+Given that the outcome is a qualitative factor variable that I am not comfortable trying to convert to a numeric value we are stuck with a factor outcome. This makes any kind of linear analysis somewhat suspect so I will opt for tree-based algorithms. 
+
+I created a couple of small samples as follows:
+
+```{r create-sample}
+inSample1 <- sample(1:19216, 1000);
+sample1 <- completeCols[inSample1,];
+inSample2 <- sample(1:19216, 1000);
+sample2 <- completeCols[inSample2,];
+inSample3 <- sample(1:19216, 1000);
+sample3 <- completeCols[inSample3,];
+```
+so that I would have a managable dataset to experiment with and to perform cross validation. Even with only 1000 records took a while for some algorithms. Given that the training data set is almost 20,000 rows with 53 variables, a painfully large data set for computationally intensive predictions algorithms such as Random Forest, I was worried that my model building would never finish so I reduced the data set using PCA. 
+
+```{r exec-pca}
+preProc <- preProcess(sample1[,-53], method="pca", pcaComp = 5);
+```
+I experimented with various values for pcaComp, for 2 to 25, and found that 5 took a managable amount of time to process and captured most of the information value from the 53 variables. Here is an example run of rpart on the sample set:
+
+```{r sample-rpart}
+pred1 <- predict(preProc, sample1[,-53]);
+mod1 <- train(pred1, sample1[,53], method="rpart");
+fancyRpartPlot(mod1$finalModel);
 ```
 
-## Including Plots
+Makes for a pretty chart, and one that is easy to interpret, but it is not super accurate:
 
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+pred1a <- predict(preProc, sample2[,-53]);
+confusionMatrix(sample2$classe, predict(mod1, pred1a));
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+I tried a number of algorithms and found that Random Forest seems to yield the highest accuracy:
+
+```{r sample-rf, cache=TRUE}
+mod2 <- train(pred1, sample1[,53], method="rf");
+pred2a <- predict(preProc, sample2[,-53]);
+confusionMatrix(sample2$classe, predict(mod2, pred2a));
+```
+I tried combining predictors, but got horrible results. So now it is time to create a Random Forest model using the entire training set. 
+
+```{r main-rf, cache=TRUE}
+preProc <- preProcess(completeCols[,-53], method="pca", pcaComp = 5);
+trainPC <- predict(preProc, completeCols[,-53]);
+modFit <- train(trainPC, completeCols[,53], method="rf");
+```
+and then test it on a subset:
+```{r validate-rf, cache=TRUE}
+pred3 <- predict(preProc, sample3[,-53]);
+confusionMatrix(sample3$classe, predict(modFit, pred3));
+```
+
+Looks pretty good so now it is time to test it against the test data:
+```{r test-data, cache=TRUE}
+testing <- read.csv("pml-testing.csv");
+testingTab <- data.frame(testing);
+testingTab <- cbind(mutate_all(testingTab[,8:159], as.numeric), testingTab[160]);
+testingTab <- testingTab %>% select_if(function(col) !is.na(col[2]));
+testingTab <- testingTab %>% select_if(function(col) col[2] != 1);
+
+pred4 <- predict(preProc, testingTab[,-53]);
+predict(modFit, pred4);
+```
+Sadly, I seem to have no way to validate these values :(
