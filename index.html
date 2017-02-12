@@ -130,7 +130,7 @@ $(document).ready(function () {
 </div>
 <div id="the-data" class="section level2">
 <h2>The Data</h2>
-<p>We were provided with two data sets, a training set of 19,622 observations and a testing set of 20 observations. Opening the test set, we see that each observation has 160 variables, six identifying information about the observation (name, date, etc.), 153 containing numeric readings from the activity tracking device, and one identifying how ‘correclty’ the exercise was performed. The first six are not interesting to us (we are not interested in knowing that Pedro performs the exercises more correctly than Jeremy). Really we are interested in predicting the outcome variable based upon the 153 numeric variables provided by the activity tracking devices.</p>
+<p>We were provided with two data sets, a training set of 19,622 observations and a testing set of 20 observations. Opening the test set, we see that each observation has 160 variables, six identifying information about the observation (name, date, etc.), 153 containing numeric readings from the activity tracking device, and one identifying how ‘correctly’ the exercise was performed. The first six are not interesting to us (we are not interested in knowing that Pedro performs the exercises more correctly than Jeremy). Really we are interested in predicting the outcome variable based upon the 153 numeric variables provided by the activity tracking devices.</p>
 <p>On closer inspection, it appears only a tiny fraction, 406 observations or 2%, have data in all 153 variables. 98% of the observations have data for only 53 variables. Given this, I decided to analyze the two types of observations separately. To this end I segregated and cleaned the data as follows:</p>
 <pre class="r"><code>training &lt;- read.csv(&quot;pml-training.csv&quot;);
 trainingTab &lt;- data.frame(training);
@@ -152,9 +152,9 @@ inSample2 &lt;- sample(1:19216, 1000);
 sample2 &lt;- completeCols[inSample2,];
 inSample3 &lt;- sample(1:19216, 1000);
 sample3 &lt;- completeCols[inSample3,];</code></pre>
-<p>so that I would have a managable dataset to experiment with and to perform cross validation. Even with only 1000 records took a while for some algorithms. Given that the training data set is almost 20,000 rows with 53 variables, a painfully large data set for computationally intensive predictions algorithms such as Random Forest, I was worried that my model building would never finish so I reduced the data set using PCA.</p>
+<p>so that I would have a manageable dataset to experiment with and to perform cross validation. Even with only 1000 records took a while for some algorithms. Given that the training data set is almost 20,000 rows with 53 variables, a painfully large data set for computationally intensive predictions algorithms such as Random Forest, I was worried that my model building would never finish so I reduced the data set using PCA.</p>
 <pre class="r"><code>preProc &lt;- preProcess(sample1[,-53], method=&quot;pca&quot;, pcaComp = 5);</code></pre>
-<p>I experimented with various values for pcaComp, for 2 to 25, and found that 5 took a managable amount of time to process and captured most of the information value from the 53 variables. Here is an example run of rpart on the sample set:</p>
+<p>I experimented with various values for pcaComp, for 2 to 25, and found that 5 took a manageable amount of time to process and captured most of the information value from the 53 variables. Here is an example run of rpart on the sample set:</p>
 <pre class="r"><code>pred1 &lt;- predict(preProc, sample1[,-53]);
 mod1 &lt;- train(pred1, sample1[,53], method=&quot;rpart&quot;);
 fancyRpartPlot(mod1$finalModel);</code></pre>
@@ -266,7 +266,7 @@ confusionMatrix(sample3$classe, predict(modFit, pred3));</code></pre>
 ## Detection Rate          0.284    0.201    0.161    0.171    0.183
 ## Detection Prevalence    0.284    0.201    0.161    0.171    0.183
 ## Balanced Accuracy       1.000    1.000    1.000    1.000    1.000</code></pre>
-<p>Looks pretty good so now it is time to test it against the test data:</p>
+<p>Looks suspiciously accurate. Hmm, well it is time to test it against the test data:</p>
 <pre class="r"><code>testing &lt;- read.csv(&quot;pml-testing.csv&quot;);
 testingTab &lt;- data.frame(testing);
 testingTab &lt;- cbind(mutate_all(testingTab[,8:159], as.numeric), testingTab[160]);
@@ -278,6 +278,8 @@ predict(modFit, pred4);</code></pre>
 <pre><code>##  [1] B A B A A E D B A A A C B A E E C B B B
 ## Levels: A B C D E</code></pre>
 <p>Sadly, I seem to have no way to validate these values :(</p>
+<p>POST SCRIPT: I submitted these values to the quiz and got 18/20. I guess a Random Forest model trained with 19k observations is pretty accurate :)</p>
+
 </div>
 
 
